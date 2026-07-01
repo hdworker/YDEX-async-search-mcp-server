@@ -2,21 +2,21 @@
 
 Доработка оригинального [Yandex Search MCP Server](https://github.com/yandex/yandex-search-mcp-server) с добавлением:
 
-- **Async режим** — отложенные запросы для экономии до 94%
-- **SQLite хранение** — автоматическое сохранение operation IDs
-- **Отслеживание статуса** — проверка результатов через MCP инструменты
+- **Async режим по умолчанию** - отложенные запросы для экономии до 94%
+- **SQLite хранение** - автоматическое сохранение operation IDs
+- **Отслеживание статуса** - проверка результатов через MCP инструменты
 
 ## Экономия
 
 | Режим | Цена за 1000 запросов (НДС) | Экономия |
 |-------|----------------------------|----------|
-| Синхронный дневной | 488 ₽ | — |
-| **Отложенный дневной** | **30,5 ₽** | **94%** |
-| Синхронный ночной | 366 ₽ | 25% |
-| **Отложенный ночной** | **25,41 ₽** | **95%** |
-| Генеративный ответ | 5 080 ₽ | — |
+| Синхронный дневной | 488 руб. | - |
+| **Отложенный дневной** | **30,5 руб.** | **94%** |
+| Синхронный ночной | 366 руб. | 25% |
+| **Отложенный ночной** | **25,41 руб.** | **95%** |
+| Генеративный ответ | 5 080 руб. | - |
 
-**Ночные часы:** 00:00 — 07:59 UTC+3
+**Ночные часы:** 00:00 - 07:59 UTC+3
 
 ## Установка Yandex CLI
 
@@ -128,19 +128,37 @@ python server.py
 }
 ```
 
+### opencode
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "yandex-search": {
+      "type": "local",
+      "command": ["python3", "/path/to/server.py"],
+      "env": {
+        "SEARCH_API_KEY": "{env:SEARCH_API_KEY}",
+        "FOLDER_ID": "{env:FOLDER_ID}"
+      }
+    }
+  }
+}
+```
+
 ## MCP Инструменты
 
 ### web_search
 
-Выполняет поиск с поддержкой sync и async режимов.
+Выполняет поиск с поддержкой sync и async режимов. **По умолчанию используется async режим.**
 
 **Параметры:**
-- `query` (string, required) — поисковый запрос
-- `search_region` (string, required) — регион: `ru`, `tr`, `en`
-- `mode` (string, optional) — `sync` (по умолчанию) или `async`
-- `wait` (boolean, optional) — ждать ли результат при async (по умолчанию false)
+- `query` (string, required) - поисковый запрос
+- `search_region` (string, required) - регион: `ru`, `tr`, `en`
+- `mode` (string, optional) - `async` (по умолчанию) или `sync`
+- `wait` (boolean, optional) - ждать ли результат при async (по умолчанию false)
 
-**Пример sync запроса:**
+**Пример async запроса (по умолчанию):**
 ```json
 {
   "body": {
@@ -150,13 +168,13 @@ python server.py
 }
 ```
 
-**Пример async запроса:**
+**Пример sync запроса:**
 ```json
 {
   "body": {
     "query": "кофемашина",
     "search_region": "ru",
-    "mode": "async"
+    "mode": "sync"
   }
 }
 ```
@@ -166,7 +184,7 @@ python server.py
 Получает статус и результат async запроса.
 
 **Параметры:**
-- `operation_id` (string, required) — ID операции из web_search
+- `operation_id` (string, required) - ID операции из web_search
 
 **Пример:**
 ```json
@@ -182,52 +200,84 @@ python server.py
 Получает список всех pending запросов.
 
 **Параметры:**
-- `limit` (integer, optional) — максимум результатов (по умолчанию 100)
+- `limit` (integer, optional) - максимум результатов (по умолчанию 100)
 
 ### cleanup_old_searches
 
 Очищает старые запросы из локального хранилища.
 
 **Параметры:**
-- `days` (integer, optional) — удалять запросы старше N дней (по умолчанию 7)
+- `days` (integer, optional) - удалять запросы старше N дней (по умолчанию 7)
 
-## Пример использования
+## Подключение к AI-агенту
 
-### 1. Отправить async запрос
-
-```python
-# Вызов через MCP
-result = web_search({
-    "query": "кофемашина",
-    "search_region": "ru",
-    "mode": "async"
-})
-
-# Результат:
-# {
-#   "operation_id": "abc123-def456",
-#   "status": "PENDING",
-#   "message": "Request queued. Use get_search_status to check result."
-# }
-```
-
-### 2. Проверить статус
+### Пример интеграции с Python
 
 ```python
-# Вызов через MCP
-result = get_search_status({
-    "operation_id": "abc123-def456"
-})
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+import asyncio
+import json
 
-# Результат:
-# {
-#   "operation_id": "abc123-def456",
-#   "status": "COMPLETED",
-#   "created_at": "2025-01-01T12:00:00Z",
-#   "completed_at": "2025-01-01T12:00:05Z",
-#   "responses": [...]
-# }
+async def search_with_yandex():
+    # Настройка сервера
+    server_params = StdioServerParameters(
+        command="python3",
+        args=["/path/to/server.py"],
+        env={
+            "SEARCH_API_KEY": "your_api_key",
+            "FOLDER_ID": "your_folder_id"
+        }
+    )
+    
+    # Подключение к серверу
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            
+            # Вызов поиска (async по умолчанию)
+            result = await session.call_tool(
+                "web_search",
+                arguments={
+                    "body": {
+                        "query": "кофемашина",
+                        "search_region": "ru"
+                    }
+                }
+            )
+            
+            # Парсинг результата
+            response = json.loads(result.content[0].text)
+            print(f"Operation ID: {response['operation_id']}")
+            print(f"Status: {response['status']}")
+            
+            # Проверка статуса
+            status_result = await session.call_tool(
+                "get_search_status",
+                arguments={
+                    "body": {
+                        "operation_id": response['operation_id']
+                    }
+                }
+            )
+            
+            status = json.loads(status_result.content[0].text)
+            print(f"Final status: {status['status']}")
+            
+            if status['status'] == 'COMPLETED':
+                for item in status.get('responses', []):
+                    print(f"Found: {item['data'][:100]}...")
+                    print(f"Source: {item['source']}")
+
+# Запуск
+asyncio.run(search_with_yandex())
 ```
+
+### Пример использования в Claude Desktop
+
+1. Добавьте конфигурацию MCP сервера в `claude_desktop_config.json`
+2. Перезапустите Claude Desktop
+3. Используйте инструмент `web_search` для поиска
 
 ## Архитектура
 
@@ -270,18 +320,18 @@ result = get_search_status({
 
 ## Стоимость
 
-详见 [Yandex Search API Pricing](https://yandex.cloud/ru/docs/search-api/pricing/)
+Подробнее: [Yandex Search API Pricing](https://yandex.cloud/ru/docs/search-api/pricing/)
 
 ### Пример расчета
 
 При 1000 запросов в день:
-- **Sync:** 488 ₽/день = 14 640 ₽/мес
-- **Async:** 30,5 ₽/день = 915 ₽/мес
-- **Экономия:** 13 725 ₽/мес (94%)
+- **Sync:** 488 руб./день = 14 640 руб./мес
+- **Async:** 30,5 руб./день = 915 руб./мес
+- **Экономия:** 13 725 руб./мес (94%)
 
 ## Лицензия
 
-Apache License 2.0 — см. [LICENSE](LICENSE)
+Apache License 2.0 - см. [LICENSE](LICENSE)
 
 ## Благодарности
 

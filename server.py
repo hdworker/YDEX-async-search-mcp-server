@@ -191,7 +191,7 @@ def web_search(body: dict) -> str:
     if error_message := validate_input_data(data, required_keys):
         return error_message
 
-    mode = data.get("mode", "sync")
+    mode = data.get("mode", "async")
     wait = data.get("wait", False)
     
     if mode == "async":
